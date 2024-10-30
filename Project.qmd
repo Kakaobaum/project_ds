@@ -1,0 +1,380 @@
+---
+title: "Data Engineering Project with R"
+subtitle: "Dataset: Sickness and weather data (Vienna): https://www.kaggle.com/zikazika/sickness-and-weather-data/notebooks"
+author: "Ionica & Bilalic"
+date: today
+embed-resources: true
+format:
+  html: 
+    output-file: Sickness and weather data_Ionica-Bilalic.html
+    #output-ext: "html.html" 
+    toc: true
+    toc-location: right
+    code-link: true
+    code-tools: true
+    #df-print: kable
+    theme:
+      light: flatly
+      dark: darkly
+    #echo: fenced
+  pdf: 
+    output-file: Sickness and weather data_Ionica-Bilalic.pdf 
+    toc: true
+    number-sections: true
+    code-link: true
+    df-print: tibble
+    crossref: 
+      lof-title: "List of Figures"
+fig-align: center
+execute: 
+  warning: false
+---
+
+```{=tex}
+\listoffigures 
+\listoftables
+\listoflistings
+```
+
+
+### Instructions
+Your report must be of high quality, meaning that your report: 
+
+* is visually and textually pleasing of 
+* does not look/read/feel like a draft instead of a finished analysis
++ explains/discusses your findings and results in the main text, e.g., explain/discuss all figures/table in the main text 
+* is representable such that it can show to any interested third party
+* uses figure/table captions/linking/reference (see example further down)
+* Do not show any standard printout of R-code, use for data.frame/tibbles `knitr::kable()` printing. 
+* Do not simply print datasets (too many lines) use instead `rmarkdown::paged_table()`
+:::
+
+
+{{< pagebreak >}}
+
+# Introduction
+
+::: callout-caution
+### Instructions
+Write some text that introduces the reader to your report. Give a brief overview of what is shown in the sections of your report, like the data handling, descriptive statistics, data visualisations, etc.  
+
+:::
+
+
+## Libraries
+
+```{r}
+#| code-summary: Libraries
+#| code-fold: true
+library <- function(...) {suppressPackageStartupMessages(base::library(...))}
+library(tidyverse)
+library(dplyr)
+library(skimr)
+library(janitor)
+library(summarytools)
+library(rmarkdown)
+library(knitr)
+library(stringr)
+```
+
+
+# Data 
+
+## Data source
+Data got donwloaded from: https://www.kaggle.com/datasets/zikazika/sickness-and-weather-data
+In the package are 8 Datasets with the following names:
+- influenza.csv
+- weather_2012.csv
+- weather_2013.csv
+- weather_2014.csv
+- weather_2015.csv
+- weather_2016.csv
+- weather_2017.csv
+- weather_2018.csv
+
+
+
+
+## Data import
+
+We import the data of the sick cases in a variable named influenza
+```{r}
+#| code-summary: Load and specify dataset
+#| code-fold: true
+# Load data
+influenza <- read.csv("data/influenza.csv")
+
+influenza <- as_tibble(influenza)
+paged_table(influenza)
+```
+
+
+Convert Columns to Numeric: Convert Neuerkrankungen pro Woche to numeric and extract numeric values from Schwankungsbreite. We also change the format of the data in the column Kalenderwoche.
+```{r}
+#| code-fold: true
+# Clean and convert relevant columns
+influenza <- influenza %>%
+  janitor::clean_names() %>%
+  mutate(
+    neuerkrankungen_pro_woche = as.numeric(neuerkrankungen_pro_woche),
+    schwankungsbreite = as.numeric(str_extract(schwankungsbreite, "\\d+(\\.\\d+)?")),
+    kalenderwoche = as.numeric(str_extract(kalenderwoche, "\\d+"))
+  )
+paged_table(influenza)
+```
+As we see there is also data missing for several calender weeks. So we just keep this in mind when we merge the datasets.
+
+```{r}
+#summarytools::dfSummary(influenza) |> print(method = "render")
+```
+
+Now we are going to merge the weather data from 2012 to 2018 into one dataset.
+```{r}
+#| code-summary: Load and specify dataset
+#| code-fold: true
+# List all CSV files in the directory (adjust path as needed)
+file_list <- list.files(path = "data", pattern = "weather_\\d{4}.csv", full.names = TRUE)
+# Read and merge all files
+weather_data <- file_list %>%
+  map_dfr(read.csv)
+weather_data <- as_tibble(weather_data)
+# Display a summary to confirm
+paged_table(weather_data)
+#summarytools::dfSummary(weather_data) |> print(method = "render")
+
+```
+We see that there is a small difference in the dates of the two datasets. We will fix this by converting the date column to a date format(weeks) and then merging the two datasets. For this, we will use the lubridate package.
+```{r}
+#| code-summary: Load and specify dataset
+#| code-fold: true
+library(lubridate)
+
+# Convert `weather_data` to weekly summaries
+weather_weekly <- weather_data %>%
+  mutate(date = ymd(paste(year, month, day, sep = "-")),
+         week = week(date)) %>%
+  group_by(year, week) %>%
+  summarize(
+    across(starts_with("temp"), ~ round(mean(.x, na.rm = TRUE), 2)),
+    across(starts_with("hum"), ~ round(mean(.x, na.rm = TRUE), 2)),
+    sun_hours = round(sum(sun_hours, na.rm = TRUE), 2),
+    precip = round(sum(precip, na.rm = TRUE), 2),
+    wind_mSec = round(mean(wind_mSec, na.rm = TRUE), 2)
+  )
+
+# Preview the transformed data
+paged_table(weather_weekly)
+```
+Now lets merge the two datasets. We join them by week and year on influenza. The Weather data also starts in 2012 so we will only keep the data from 2012 onwords.
+```{r}
+#| code-summary: Merge the two datasets
+#| code-fold: true
+# Merge the two datasets
+data <- influenza %>%
+  filter(jahr >= 2012) %>%
+  left_join(weather_weekly, by = c("jahr" = "year", "kalenderwoche" = "week"))
+paged_table(data)
+```
+Let's check if there are any missing values in the data
+```{r}
+#| code-summary: Check for missing values
+#| code-fold: true
+# Check for missing values
+data %>%
+  filter(if_any(everything(), is.na)) %>% paged_table()
+```
+We see that there are missing values in the data. We will replace them with the mean of the column
+```{r}
+#| code-summary: Replace NA
+#| code-fold: true
+# Replace NA
+data <- data %>%
+  mutate(across(where(is.numeric), ~ round(if_else(is.na(.), mean(., na.rm = TRUE), .), 2)))
+# Check for missing values
+data %>%
+  filter(if_any(everything(), is.na)) %>% paged_table()
+```
+
+As we see no NA values anymore we can now proceed with the analysis.
+You can also dowload the prepared dataset here and use it for own projects. [Download](data_output.csv)
+```{r, echo=FALSE}
+write.csv(data, "data_output.csv", row.names = FALSE)
+```
+
+
+# Summary statistic tables
+
+### Instructions
+Make summary statistics of your data.
+
+::: {.panel-tabset}
+
+## Numeric data
+
+@tbl-summary-num-data shows for the numerical variables in the data dataset some summary statistics.
+
+```{r}
+#| label: "tbl-summary-num-data"
+#| tbl-cap: "Summary statistics of numerical variables in `datasets::data` with tidyverse (ungrouped)"
+#| code-fold: true
+# Summary statistics for numerical variables in `data`
+data %>%
+  janitor::clean_names() %>%                 # Clean column names to lowercase and underscores
+  pivot_longer(cols = where(is.numeric)) %>%  # Reshape to long format for numerical columns
+  group_by(name) %>%                         # Group by each numerical variable
+  summarize(
+    N = n(),
+    min = min(value, na.rm = TRUE),
+    mean = mean(value, na.rm = TRUE),
+    median = median(value, na.rm = TRUE),
+    max = max(value, na.rm = TRUE),
+    st_dev = sd(value, na.rm = TRUE)
+  ) %>%
+  knitr::kable(digits = 2, caption = "Summary statistics of numerical variables in `data` dataset")
+```
+
+
+## Numeric data grouped
+
+@tbl-summary-num-tidyverse-data shows for the numerical variables in our dataset grouped summary statistics for every year.
+
+```{r}
+#| label: "tbl-summary-num-tidyverse-data"
+#| tbl-cap: "Summary statistics of numerical variables in `datasets::data` with tidyverse grouped by year"
+#| code-fold: true
+# Summary statistics grouped by 'jahr' for numerical variables in `data`
+data %>%
+  clean_names() %>%
+  pivot_longer(
+    cols = -c(id, bezeichnung, grippesaison, jahr, kalenderwoche),
+    names_to = "name",
+    values_to = "value"
+  ) %>%
+  group_by(jahr, name) %>%
+  summarize(
+    N = n(),
+    min = min(value, na.rm = TRUE),
+    mean = mean(value, na.rm = TRUE),
+    median = median(value, na.rm = TRUE),
+    max = max(value, na.rm = TRUE),
+    st.dev = sd(value, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  kable(
+    digits = 2,
+    caption = "Summary statistics of numerical variables in the dataset grouped by year"
+  )
+```
+
+## Nominal data
+
+@tbl-summary-fct-tidyverse-data shows summary statistics for the data factor variables.
+
+```{r}
+#| label: "tbl-summary-fct-tidyverse-data"
+#| tbl-cap: "Summary statistics of factor variables in `datasets::data` with tidyverse."
+#| code-fold: true
+data %>%
+  clean_names() %>%
+  # Convert character variables to factors
+  mutate(across(where(is.character), as.factor)) %>%
+  select(where(is.factor)) %>%
+  pivot_longer(cols = everything(), names_to = "name", values_to = "value") %>%
+  group_by(name) %>%
+  count(value) %>%
+  ungroup() %>%
+  arrange(desc(name), n) %>%
+  kable(
+    digits = 2,
+    caption = "Summary statistics of factor variables in your dataset."
+  )
+```
+
+## All variable statistics
+
+@tbl-Base-R-All-Variables shows summary statistics applicable to different data type.
+
+```{r}
+#| code-fold: true
+#| code-summary: Load and specify dataset
+# specify full dataset
+data_all <- data
+
+## numerical data
+data_num <- data_all[sapply(data_all, is.numeric)]
+data_num <- subset(data_all, select = sapply(data_all,is.numeric))
+data_num <- data_all |> select(where(is.numeric))
+
+## nominal data
+data_nom <- data_all[!sapply(data_all, is.numeric)]
+data_chr <- data_all[sapply(data_all, is.character)]
+data_lgl <- data_all[sapply(data_all, is.logical)]
+data_fct <- data_all[sapply(data_all, is.factor)]
+```
+
+
+```{r}
+#| label: tbl-Base-R-All-Variables
+#| tbl-cap: "Base R statistics applicable to all variables"
+#| code-fold: true
+data.frame(
+  #var = names(data_all),
+  n_obs = sapply(data_all, function(.) length(na.omit(.)))
+  ,n_all = sapply(na.omit(data_all), length)
+  ,n_missing = sapply(data_all, function(.) sum(is.na(.)))
+  ,mode = data_all |> sapply(mode)
+  ,class = data_all |> sapply(class)
+) |> #as_tibble() |> 
+  knitr::kable()
+```
+
+
+## Numerical data
+
+```{r}
+#| code-fold: true
+library(tidyverse)
+## n_obs individual by variables
+## n_all all variables have same n observations
+
+library(tidyverse)
+data.frame(
+  var = names(data_num),
+  n_obs = sapply(data_num, function(.) length(na.omit(.)))
+  ,n_all = sapply(na.omit(data_num), length)
+  ,min = sapply(data_num, function(.) min(na.omit(.)))
+  ,min_all = sapply(na.omit(data_num), min)
+  ,mean = sapply(data_num, function(.) mean(na.omit(.)))
+  ,mean_all = sapply(na.omit(data_num), mean)
+  ,median = sapply(data_num, function(.) median(na.omit(.)))
+  ,median_all = sapply(na.omit(data_num), median)
+  ,max = sapply(data_num, function(.) max(na.omit(.)))
+  ,max_all = sapply(na.omit(data_num), max)
+  ,sd = sapply(data_num, function(.) sd(na.omit(.)))
+  ,sd_all = sapply(na.omit(data_num), sd)
+) |> 
+  as_tibble() |> 
+  select(!contains("_all")) |> 
+  knitr::kable(digits = 2)
+```
+
+
+## print
+```{r}
+rmarkdown::paged_table(data)
+```
+:::
+
+# Data visualisations
+
+::: callout-caution
+### Instructions
+Visually explore your data. 
+:::
+
+# Summary
+
+::: callout-caution
+### Instructions
+Summarise your finding. 
+:::
