@@ -36,27 +36,26 @@ execute:
 \listoflistings
 ```
 
-
-### Instructions
-Your report must be of high quality, meaning that your report: 
-
-* is visually and textually pleasing of 
-* does not look/read/feel like a draft instead of a finished analysis
-+ explains/discusses your findings and results in the main text, e.g., explain/discuss all figures/table in the main text 
-* is representable such that it can show to any interested third party
-* uses figure/table captions/linking/reference (see example further down)
-* Do not show any standard printout of R-code, use for data.frame/tibbles `knitr::kable()` printing. 
-* Do not simply print datasets (too many lines) use instead `rmarkdown::paged_table()`
-:::
-
-
 {{< pagebreak >}}
 
 # Introduction
 
-::: callout-caution
-### Instructions
-Write some text that introduces the reader to your report. Give a brief overview of what is shown in the sections of your report, like the data handling, descriptive statistics, data visualisations, etc.  
+::: {.callout-note appearance="simple"}
+This report provides a comprehensive analysis of influenza cases and weather data collected over multiple years. The goal of the report is to investigate potential relationships between weather conditions (such as temperature, humidity, and precipitation) and the incidence of influenza cases.
+
+### Report Overview
+
+1. **Dataset Introduction**: Key variables from both influenza and weather data are explained, including units and descriptions.
+
+2. **Data Preparation**: Details on handling missing values, converting data types, and combining the two datasets by year and week, focusing on data from 2012 to 2018.
+
+3. **Descriptive Statistics**: A summary of key statistics, like average, minimum, and maximum values, provides insight into trends over time.
+
+4. **Data Visualization**: Charts and plots reveal patterns in the data, showing how weather conditions may relate to flu cases.
+
+5. **Summary**: The final section highlights key findings and observations from the analysis, offering insights into how weather might impact influenza rates. 
+
+Each section is designed to guide the reader through a clear, structured analysis of the data.
 
 :::
 
@@ -82,22 +81,68 @@ library(stringr)
 
 ## Data source
 Data got donwloaded from: https://www.kaggle.com/datasets/zikazika/sickness-and-weather-data
+
 In the package are 8 Datasets with the following names:
+
 - influenza.csv
+
 - weather_2012.csv
+
 - weather_2013.csv
+
 - weather_2014.csv
+
 - weather_2015.csv
+
 - weather_2016.csv
+
 - weather_2017.csv
+
 - weather_2018.csv
 
 
+::: {.callout-tip collapse="true" title="Data Dictionary"}
 
+
+| Variable                   | Description                                                     | Units/Format      |
+|----------------------------|-----------------------------------------------------------------|-------------------|
+| `X`                        | Index or ID for each observation                                | Numeric           |
+| `month`                    | Month of observation (1-12)                                     | Numeric           |
+| `day`                      | Day of the month for each observation                           | Numeric           |
+| `temp_dailyMin`            | Minimum temperature of the day                                  | °C                |
+| `temp_minGround`           | Minimum ground temperature of the day                           | °C                |
+| `temp_dailyMean`           | Mean daily temperature                                          | °C                |
+| `temp_dailyMax`            | Maximum daily temperature                                       | °C                |
+| `temp_7h`                  | Temperature recorded at 7 AM                                    | °C                |
+| `temp_14h`                 | Temperature recorded at 2 PM                                    | °C                |
+| `temp_19h`                 | Temperature recorded at 7 PM                                    | °C                |
+| `hum_dailyMean`            | Mean daily humidity                                             | Percentage        |
+| `hum_7h`                   | Humidity recorded at 7 AM                                       | Percentage        |
+| `hum_14h`                  | Humidity recorded at 2 PM                                       | Percentage        |
+| `hum_19h`                  | Humidity recorded at 7 PM                                       | Percentage        |
+| `sun_hours`                | Total hours of sunlight per day                                 | Hours             |
+| `skyCover_7h`              | Sky cover at 7 AM (cloudiness, on a scale from 0-10)            | Scale (0-10)      |
+| `skyCover_14h`             | Sky cover at 2 PM                                               | Scale (0-10)      |
+| `skyCover_19h`             | Sky cover at 7 PM                                               | Scale (0-10)      |
+| `wind_degrees`             | Wind direction in degrees                                       | Degrees           |
+| `wind_mSec`                | Wind speed                                                      | m/s               |
+| `precip`                   | Precipitation amount                                            | mm                |
+| `year`                     | Year of observation                                             | YYYY format       |
+| `ID` (Influenza Dataset)   | Unique identifier for each weekly influenza observation         | Alphanumeric      |
+| `BEZEICHNUNG`              | Data source name, indicating data provider                      | Text              |
+| `Grippesaison`             | Influenza season                                                | Year/Year format  |
+| `Jahr`                     | Year of observation                                             | YYYY format       |
+| `Kalenderwoche`            | Calendar week                                                   | Week number       |
+| `Neuerkrankungen.pro.Woche`| Number of new flu cases reported each week                      | Count             |
+| `Schwankungsbreite`        | Margin of error in reported new cases                           | +/- Count         |
+
+This dictionary includes each variable's name, description and units.
+
+:::
 
 ## Data import
 
-We import the data of the sick cases in a variable named influenza
+We import the data of the sick cases in a variable named **influenza**
 ```{r}
 #| code-summary: Load and specify dataset
 #| code-fold: true
@@ -125,10 +170,11 @@ paged_table(influenza)
 As we see there is also data missing for several calender weeks. So we just keep this in mind when we merge the datasets.
 
 ```{r}
+#| code-fold: true
 #summarytools::dfSummary(influenza) |> print(method = "render")
 ```
 
-Now we are going to merge the weather data from 2012 to 2018 into one dataset.
+Now we are going to merge the **weather data** from 2012 to 2018 into one dataset.
 ```{r}
 #| code-summary: Load and specify dataset
 #| code-fold: true
@@ -366,15 +412,161 @@ rmarkdown::paged_table(data)
 :::
 
 # Data visualisations
+```{r}
+#| code-fold: true
+#install.packages(c("ggplot2", "lubridate", "ISOweek", "dplyr", "corrplot"))
+library(ggplot2)
+library(lubridate)
+library(ISOweek)
+library(dplyr)
+library(corrplot)
+```
 
-::: callout-caution
-### Instructions
-Visually explore your data. 
+Let's create a date variable from the year and calendar week columns in the data, which together specify a particular week in a year. However, these two variables separately don't form a continuous time scale. By creating a date variable, we can represent each observation as a specific point in time, ensuring accurate chronological ordering. We will use the ISOweek package to convert the calendar week to a date. 
+```{r}
+#| code-fold: true
+# Create a proper ISO week string
+data$ISOWeek <- paste0(data$jahr, "-W", sprintf("%02d", data$kalenderwoche))
+
+# Convert ISO week to date (Monday of the week)
+data$date <- ISOweek2date(paste0(data$ISOWeek, "-1"))
+
+```
+
+::: {.panel-tabset}
+
+## New Illnesses Over Time
+```{r}
+#| code-fold: true
+ggplot(data, aes(x = date, y = neuerkrankungen_pro_woche)) +
+  geom_line(color = "blue") +
+  labs(title = "New Illnesses per Week Over Time",
+       x = "Date",
+       y = "New Illnesses per Week")
+
+```
+This plot shows a clear seasonal pattern in new illness cases in Vienna, with peaks each winter and low levels during the rest of the year. The height of these peaks varies, indicating that some winters have more severe outbreaks. This pattern is typical for flu and other respiratory illnesses, which are often affected by colder weather.
+
+
+## Temperature Over Time
+```{r}
+#| code-fold: true
+ggplot(data, aes(x = date, y = temp_dailyMean)) +
+  geom_line(color = "red") +
+  labs(title = "Daily Mean Temperature Over Time",
+       x = "Date",
+       y = "Temperature (°C)")
+
+```
+This plot shows the average daily temperature in Vienna over several years. The temperature follows a clear yearly cycle, with high temperatures in summer and low temperatures in winter. The peaks and drops are consistent, indicating warm and cold seasons each year.
+
+## New Illnesses vs. Temperature
+Explore the relationship between temperature and new illnesses. We will use a scatter plot to visualise the relationship between the daily mean temperature and the number of new illnesses per week.
+```{r}
+#| code-fold: true
+ggplot(data, aes(x = temp_dailyMean, y = neuerkrankungen_pro_woche)) +
+  geom_point(color = "darkgreen") +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(title = "New Illnesses vs. Daily Mean Temperature",
+       x = "Daily Mean Temperature (°C)",
+       y = "New Illnesses per Week")
+
+```
+This scatter plot shows the relationship between daily mean temperature and the number of new illnesses per week. The data points indicate that as the temperature decreases, the number of new illnesses tends to increase. The downward-sloping line suggests a negative correlation, meaning colder temperatures are associated with higher rates of new illnesses, which is typical for flu and other respiratory infections that peak in colder seasons.
+
+## Correlation Matrix
+Compute and visualize the correlation between numerical variables.
+```{r}
+#| code-fold: true
+# Select numeric columns for correlation
+numeric_vars <- data %>%
+  select(neuerkrankungen_pro_woche, schwankungsbreite, temp_dailyMin, temp_minGround,
+         temp_dailyMean, temp_dailyMax, temp_7h, temp_14h, temp_19h, hum_dailyMean,
+         hum_7h, hum_14h, hum_19h, sun_hours, precip, wind_mSec)
+
+# Compute correlation matrix
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+
+# Plot the correlation matrix
+corrplot(cor_matrix, method = "color", type = "upper", tl.col = "black", tl.srt = 45,tl.cex = 0.8, addgrid.col = "white")
+
+```
+This correlation matrix shows how the variables in the dataset relate to each other:
+
+- **New Illnesses**: Illnesses increase when temperatures drop, as seen by the negative correlation between new illnesses and temperature.
+- **Temperature Variables**: Different temperature measures (daily min, max, mean) are highly correlated with each other, which makes sense since they all track temperature.
+- **Humidity and Precipitation**: Humidity measures are positively related to each other and slightly negatively related to temperature.
+- **Sun Hours**: More sun hours are somewhat linked to warmer temperatures.
+
+In summary, colder temperatures and some humidity factors are associated with higher illness rates.
+
+
+## Seasonal Pattern of New Illnesses
+Analyze the seasonal trend by plotting new illnesses across calendar weeks, colored by flu season.
+```{r}
+ggplot(data, aes(x = kalenderwoche, y = neuerkrankungen_pro_woche, color = grippesaison)) +
+  geom_line() +
+  labs(title = "Seasonal Pattern of New Illnesses by Flu Season",
+       x = "Calendar Week",
+       y = "New Illnesses per Week",
+       color = "Flu Season")
+
+```
+This plot shows the seasonal pattern of new illness cases across different flu seasons. Each line represents a flu season, with cases peaking around calendar weeks 5 to 10 and then sharply declining. The peak severity varies by season, with some years experiencing much higher spikes than others. Illness cases remain low during the middle of the year and start to rise again toward the end, indicating the seasonal nature of flu outbreaks.
+
+
+## Distribution of New Illnesses by Temperature Range
+Categorize temperatures and analyze how new illnesses vary across these ranges.
+
+```{r}
+# Create temperature bins
+data$temp_bin <- cut(data$temp_dailyMean, breaks = seq(-15, 25, by = 5))
+
+# Boxplot
+ggplot(data, aes(x = temp_bin, y = neuerkrankungen_pro_woche)) +
+  geom_boxplot(fill = "orange") +
+  labs(title = "Distribution of New Illnesses by Temperature Range",
+       x = "Daily Mean Temperature (°C)",
+       y = "New Illnesses per Week")
+
+```
+This box plot shows the distribution of new illness cases per week across different temperature ranges. 
+
+- **Higher Illness Counts in Colder Temperatures**: When temperatures are between -10°C and 0°C, illness counts are generally higher, with medians around or above 10,000 cases per week.
+- **Lower Illness Counts in Warmer Temperatures**: As temperatures increase (above 0°C), the number of new illnesses tends to decrease. At 15–20°C, illness counts are the lowest, with a much smaller range of variation.
+
+In summary, colder temperatures are associated with higher weekly illness counts, while warmer temperatures see a reduction in illness cases.
+
+## Humidity vs. New Illnesses
+Investigate the impact of humidity on new illnesses.
+```{r}
+ggplot(data, aes(x = hum_dailyMean, y = neuerkrankungen_pro_woche)) +
+  geom_point(color = "purple") +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(title = "New Illnesses vs. Daily Mean Humidity",
+       x = "Daily Mean Humidity (%)",
+       y = "New Illnesses per Week")
+
+```
+This scatter plot shows the relationship between daily mean humidity and new illness cases per week. 
+
+- **Weak Correlation**: The trend line is almost flat, indicating a very weak positive correlation between humidity and illness cases. This suggests that humidity does not have a strong impact on the number of new illness cases.
+- **Data Spread**: Illness cases are spread across different humidity levels without a clear pattern, implying that other factors (like temperature) might play a more significant role in influencing illness rates.
+
+In summary, daily mean humidity appears to have minimal influence on weekly illness cases based on this data.
+
 :::
 
 # Summary
 
-::: callout-caution
-### Instructions
-Summarise your finding. 
-:::
+Here's a brief summary of our findings:
+
+1. **Seasonal Illness Peaks**: Illness cases rise in winter and fall during warmer months, showing a clear seasonal pattern.
+
+2. **Temperature Impact**: Lower temperatures are linked to higher illness rates, with the most cases occurring below 0°C.
+
+3. **Minimal Humidity Effect**: Humidity has little impact on illness rates, unlike temperature.
+
+4. **Seasonal Variability**: Some flu seasons are more severe than others, but all follow the winter peak trend.
+
+**Conclusion**: Cold weather significantly increases illness rates, making winter the peak season for respiratory illnesses, while humidity has minimal influence.
